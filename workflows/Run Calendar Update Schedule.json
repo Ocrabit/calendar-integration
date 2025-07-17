@@ -1,0 +1,350 @@
+{
+  "name": "Run Calendar Update Schedule",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "C8rZswPq9jNi2fvl",
+          "mode": "list",
+          "cachedResultName": "Calendar Create/Update (micro)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "readOnly": false,
+            "googleCalendarId": "bf91c60937f957d08f0ac28847fbdb96efdffe43c1a9d10c7a38a00ebdc5147a@group.calendar.google.com",
+            "outlookCalendarId": "AAMkAGIyN2MyMDg1LTk3NzEtNGY3Ny1iMTNhLTljZTI5ZGU5ZjI0MgBGAAAAAAA6YtHADVNhQrZSsFD4u5feBwBzWPZd-YLCTaKj5eZoLNAdAAAAAAEGAABzWPZd-YLCTaKj5eZoLNAdAAAAAAVTAAA=",
+            "calendarName": "marco@mdc"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "googleCalendarId",
+              "displayName": "googleCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "outlookCalendarId",
+              "displayName": "outlookCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "calendarName",
+              "displayName": "calendarName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "readOnly",
+              "displayName": "readOnly",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        448
+      ],
+      "id": "44ef45e8-02f0-4790-8638-6f0ff9fe9629",
+      "name": "marco@mdc (micro)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "C8rZswPq9jNi2fvl",
+          "mode": "list",
+          "cachedResultName": "Calendar Create/Update (micro)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "readOnly": true,
+            "googleCalendarId": "5475256001ef2bd3e4c1fb288f7ef7881be6ab0102f58e32ac38af63bd2c4d93@group.calendar.google.com",
+            "outlookCalendarId": "AAMkAGIyN2MyMDg1LTk3NzEtNGY3Ny1iMTNhLTljZTI5ZGU5ZjI0MgBGAAAAAAA6YtHADVNhQrZSsFD4u5feBwBzWPZd-YLCTaKj5eZoLNAdAAAAAAEGAABzWPZd-YLCTaKj5eZoLNAdAApG0s3kAAA=",
+            "calendarName": "marco@belmont \\[Events\\]"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "googleCalendarId",
+              "displayName": "googleCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "outlookCalendarId",
+              "displayName": "outlookCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "calendarName",
+              "displayName": "calendarName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "readOnly",
+              "displayName": "readOnly",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        832
+      ],
+      "id": "9140d23d-3889-4995-a443-b96e6c31220b",
+      "name": "marco@belmont [Events] (micro)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "C8rZswPq9jNi2fvl",
+          "mode": "list",
+          "cachedResultName": "Calendar Create/Update (micro)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "readOnly": true,
+            "googleCalendarId": "4cf9e3c46a7c8186203eddcc371b957cc31a20cb88e78a5c4bc88013285af7b9@group.calendar.google.com",
+            "outlookCalendarId": "AAMkAGIyN2MyMDg1LTk3NzEtNGY3Ny1iMTNhLTljZTI5ZGU5ZjI0MgBGAAAAAAA6YtHADVNhQrZSsFD4u5feBwBzWPZd-YLCTaKj5eZoLNAdAAAAAAEGAABzWPZd-YLCTaKj5eZoLNAdAApG-2qQAAA=",
+            "calendarName": "marco@belmont \\[Homework\\]"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "googleCalendarId",
+              "displayName": "googleCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "outlookCalendarId",
+              "displayName": "outlookCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "calendarName",
+              "displayName": "calendarName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "readOnly",
+              "displayName": "readOnly",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        1024
+      ],
+      "id": "e47a162f-9fec-4a95-9aad-d13d8bf626fc",
+      "name": "marco@belmont [Homework] (micro)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "C8rZswPq9jNi2fvl",
+          "mode": "list",
+          "cachedResultName": "Calendar Create/Update (micro)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "readOnly": true,
+            "outlookCalendarId": "AAMkAGIyN2MyMDg1LTk3NzEtNGY3Ny1iMTNhLTljZTI5ZGU5ZjI0MgBGAAAAAAA6YtHADVNhQrZSsFD4u5feBwBzWPZd-YLCTaKj5eZoLNAdAAAAAAEGAABzWPZd-YLCTaKj5eZoLNAdAApG-2qRAAA=",
+            "googleCalendarId": "cc3e949cf8530e0b2952eaa745e22a93e0fe81f813a79877495ea07745a7c41a@group.calendar.google.com",
+            "calendarName": "marco@belmont"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "googleCalendarId",
+              "displayName": "googleCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "outlookCalendarId",
+              "displayName": "outlookCalendarId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "calendarName",
+              "displayName": "calendarName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "readOnly",
+              "displayName": "readOnly",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        640
+      ],
+      "id": "f82c07f8-07f0-4e6b-9a26-12e26a083149",
+      "name": "marco@belmont (micro)"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        736
+      ],
+      "id": "caba4850-4465-4293-b332-6c9571dd44bc",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "marco@mdc (micro)": {
+      "main": [
+        []
+      ]
+    },
+    "marco@belmont (micro)": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "marco@mdc (micro)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "marco@belmont [Events] (micro)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "marco@belmont [Homework] (micro)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "marco@belmont (micro)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f9a28710-44bc-4b65-b38e-38ce9f83a565",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a78cac6566adee16f0fc4376a5627879845957cb127fb871313d1b0ae3dd1d8f"
+  },
+  "id": "Edyb2IhxcAGd4rII",
+  "tags": []
+}

@@ -1,0 +1,1267 @@
+{
+  "name": "Calendar Create/Update (micro)",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "event",
+        "fromAllCalendars": false,
+        "calendarId": {
+          "__rl": true,
+          "value": "={{ $json.outlookCalendarId }}",
+          "mode": "id"
+        },
+        "limit": 10,
+        "output": "raw",
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        48,
+        0
+      ],
+      "id": "3693ad77-5e2f-4bf4-b421-17e2bcc382cb",
+      "name": "Get many events",
+      "webhookId": "e2854c98-6409-4bee-b977-39eea3f541ee",
+      "alwaysOutputData": false,
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "Ee0mAUUfbm6la1Mo",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "698d1b38-ba27-49a7-8c89-c675ea900a1d",
+              "leftValue": "={{ $json.start.dateTime }}",
+              "rightValue": "={{ $now }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "after"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        288,
+        0
+      ],
+      "id": "d8ba701d-1893-4799-80c3-db71860e58c0",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "const outputs = [];\n\nconst FREQ_MAP = {\n  daily: \"daily\",\n  weekly: \"weekly\",\n  absoluteMonthly: \"monthly\",\n  relativeMonthly: \"monthly\",\n  absoluteYearly: \"yearly\",\n  relativeYearly: \"yearly\",\n};\n\nconst DAY_ACRONYMS = {\n  sunday: \"SU\",\n  monday: \"MO\",\n  tuesday: \"TU\",\n  wednesday: \"WE\",\n  thursday: \"TH\",\n  friday: \"FR\",\n  saturday: \"SA\",\n};\n\nconst TRANSPARENCY_MAP = {\n  free: \"transparent\",\n  tentative: \"transparent\",\n  busy: \"opaque\",\n  oof: \"opaque\",\n  workingelsewhere: \"opaque\",\n  unknown: \"opaque\",\n};\n\nfunction toUTC(date_) {\n  const date = new Date(date_);\n  const adjusted = new Date(date.getTime() - 5 * 60 * 60 * 1000);\n  return adjusted.toISOString();\n}\n\nfor (const item of items) {\n  const json_content = item.json;\n  const html = json_content.body?.content || \"\";\n  const all_day = json_content.isAllDay || false;\n  const attendees_raw = json_content.attendees || [];\n  const locations = json_content.locations || {};\n  const show_as_raw = json_content.showAs || \"\";\n\n  // Direct Fields\n  const id = json_content.id || null;\n  const startDateTime = toUTC(json_content.start?.dateTime) || null;\n  const endDateTime = toUTC(json_content.end?.dateTime) || null;\n  const lastModified = json_content.lastModifiedDateTime || null;\n\n  // Handle Recurrance Fields\n  const recurrence = json_content.recurrence || {};\n  const pattern = recurrence.pattern || {};\n  const range = recurrence.range || {};\n  \n  const recurrence_type_raw = pattern.type || \"\";\n  const recurrence_type = FREQ_MAP[recurrence_type_raw] || null;\n  const recurrence_interval = pattern.interval || \"\";\n  const days_raw = pattern.daysOfWeek || [];\n  let days_list = [];\n  \n  if (typeof days_raw === \"string\") {\n    days_list = days_raw.split(\",\").map(s => s.trim());\n  } else if (Array.isArray(days_raw)) {\n    days_list = days_raw;\n  }\n  \n  const repeat_on_acronyms = days_list.map(day =>\n    DAY_ACRONYMS[day.toLowerCase()] || \"\"\n  );\n  \n  const until_date = range.endDate || null;\n\n  // Create RRULE\n  let rrule = \"\";\n\n  if (recurrence_type && recurrence_interval && repeat_on_acronyms.length > 0 && until_date) {\n    const untilFormatted = until_date.replace(/-/g, \"\") + \"T000000Z\";\n    rrule = `FREQ=${recurrence_type.toUpperCase()};INTERVAL=${recurrence_interval};BYDAY=${repeat_on_acronyms.join(\",\")};UNTIL=${untilFormatted}`;\n  }\n  \n  // Strip HTML\n  const description = html.replace(/<[^>]+>/g, \"\").replace(/\\r?\\n|\\r/g, \"\\n\").trim();\n\n  // Clean up \"create meet\"\n  let create_meeting = description.toLowerCase().includes(\"create meet\");\n  let new_description = description;\n\n  if (create_meeting) {\n    const lines = description.split(\"\\n\");\n    const filtered_lines = lines.filter(line => !line.toLowerCase().includes(\"create meeting\"));\n    new_description = filtered_lines.join(\"\\n\").trim();\n  }\n\n  // Parse attendees\n  let attendees_list = [];\n\n  if (Array.isArray(attendees_raw)) {\n    attendees_list = attendees_raw.map(a => {\n      if (\n        typeof a === \"object\" &&\n        a.emailAddress &&\n        typeof a.emailAddress === \"object\" &&\n        typeof a.emailAddress.address === \"string\"\n      ) {\n        return a.emailAddress.address.trim();\n      }\n      return null;\n    }).filter(Boolean);\n  }\n\n  const attendees_obj = attendees_list.map(email => ({ email }));\n\n  // Location\n  const location_info = typeof locations === \"object\" && locations.displayName\n    ? locations.displayName.trim()\n    : \"\";\n\n  // Show as\n  const show_as = TRANSPARENCY_MAP[show_as_raw.toLowerCase()] || \"opaque\";\n\n  // Push raw output\n  outputs.push({\n    json: {\n      id,\n      title: json_content.subject || \"\",\n      startDateTime,\n      endDateTime,\n      lastModifiedDateTime: lastModified,\n      createMeeting: create_meeting ? \"yes\" : \"no\",\n      allDay: all_day ? \"yes\" : \"no\",\n      attendees: attendees_obj,\n      address: location_info,\n      description: new_description,\n      show_as: show_as,\n      recurrence: {\n        type: recurrence_type,\n        interval: recurrence_interval,\n        repeat_on_days: repeat_on_acronyms,\n        until_date: until_date,\n        rrule: rrule,\n      },\n    },\n  });\n}\n\n// Final cleanup\nconst cleanedOutputs = outputs.map(entry => {\n  const json = entry.json;\n\n  return {\n    json: {\n      ...json,\n      description: typeof json.description === \"string\" ? json.description : \"\",\n      address: typeof json.address === \"string\" ? json.address : \"\",\n      attendees: Array.isArray(json.attendees)\n        ? json.attendees.map(a => a.email).join(\",\")\n        : \"\",\n      recurrence: {\n        ...json.recurrence,\n        type: typeof json.recurrence?.type === \"string\" ? json.recurrence.type : \"\",\n        interval: typeof json.recurrence?.interval === \"string\" ? json.recurrence.interval : \"\",\n        until_date: typeof json.recurrence?.until_date === \"string\" ? json.recurrence.until_date : \"\",\n        rrule: typeof json.recurrence?.rrule === \"string\" ? json.recurrence.rrule : \"\",\n        repeat_on_days: Array.isArray(json.recurrence?.repeat_on_days)\n          ? json.recurrence.repeat_on_days\n          : [],\n      },\n    },\n  };\n});\n\nreturn cleanedOutputs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        0
+      ],
+      "id": "dd7e144c-57b7-4e9f-b3c6-b70f944e12f2",
+      "name": "Parse Fields"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dd2fd614-195c-4b55-a19c-a2c92ff67867"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6e802288-0daf-412d-82d6-9b0d038b43e3",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "6c3d6a7b-ed01-4551-9260-0de2fb126b29",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.createMeeting }}",
+                    "rightValue": "no",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9d8ea8a5-2c08-4952-9b54-5feed273effb"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "756a16fa-c31a-49f9-bdba-0137a64018b5",
+                    "leftValue": "={{ $json.createMeeting }}",
+                    "rightValue": "yes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1632,
+        -96
+      ],
+      "id": "85603242-a5bd-4e44-ac3e-7e48c90886e7",
+      "name": "Meeting: 0 (No) : 1 (Yes)"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $('Call Start').item.json.googleCalendarId }}",
+          "mode": "id"
+        },
+        "start": "={{ $json.startDateTime }}",
+        "end": "={{ $json.endDateTime }}",
+        "additionalFields": {
+          "allday": "={{ $json.allDay }}",
+          "attendees": [],
+          "description": "={{ $json.description }}",
+          "guestsCanInviteOthers": false,
+          "guestsCanModify": true,
+          "location": "={{ $json.address }}",
+          "rrule": "={{ $json.recurrence.rrule }}",
+          "sendUpdates": "none",
+          "showMeAs": "={{ $json.show_as }}",
+          "summary": "={{ $json.title }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1856,
+        -288
+      ],
+      "id": "78ded76b-65f7-4b3a-ac5f-0ae7934d1dbd",
+      "name": "Create",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "SHK0qw5mpudeVh37",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalItems = $(\"Meeting: 0 (No) : 1 (Yes)\").all();\n\nconst googleItems = items;\n\nreturn googleItems.map((item, index) => {\n  const originalId = originalItems[index]?.json?.id || null;\n  const lastMod = originalItems[index]?.json?.lastModifiedDateTime || null;\n  const address_old = originalItems[index]?.json?.address || null;\n  const is_conference = originalItems[index]?.json?.createMeeting || null;\n  return {\n    json: {\n      ...item.json,\n      micro_id: originalId,\n      lastModifiedDateTime: lastMod,\n      address_old: address_old,\n      is_conference: is_conference\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        -288
+      ],
+      "id": "61c36346-2bdd-4199-8fdd-2e3365da7e46",
+      "name": "Collect Past Info"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Call Start').item.json.readOnly }}",
+                    "rightValue": "false",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    },
+                    "id": "eae61230-8a4c-49be-839c-0b2610c80961"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2304,
+        -96
+      ],
+      "id": "4227da47-1955-4f45-84a0-6c092d4ba14d",
+      "name": "readOnlyCheck"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY",
+          "mode": "list",
+          "cachedResultName": "Calendar History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Call Start').item.json.calendarName }}",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        736,
+        0
+      ],
+      "id": "9d5805b9-3f37-491f-b11c-5155882fabe5",
+      "name": "Calendar History Sheet",
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vNOPhhmrwd5jJSX1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sheetMap = {};\nconst toCreate = [];\nconst toUpdate = [];\n\n// Build the map of micro_id → sheet row\nfor (const item of items) {\n  const row = item.json;\n  const microId = row.micro_id;\n  if (microId) {\n    sheetMap[microId] = row;\n  }\n}\n\n// Assume `msEvents` is the input from the Microsoft Get Events node\nconst filteredEvents = $(\"Parse Fields\").all();\n\n// Loop through each Microsoft event\nfor (const event of filteredEvents) {\n  const microId = event.json.id; // or your chosen micro_id field\n  const msModified = event.json.lastModifiedDateTime;\n\n  const sheetRow = sheetMap[microId];\n\n  if (!sheetRow) {\n    // Not in sheet → create\n    toCreate.push(event.json);\n  } else {\n    // In sheet → check if lastModified differs\n    if (sheetRow.event_last_modified !== msModified) {\n      // Modified → update\n      toUpdate.push({\n        ...event.json,\n        row_number: sheetRow.row_number // Keep row_number to update sheet\n      });\n    }\n    // else → skip (no changes)\n  }\n}\n\n// Return as two branches (Output 0: create, Output 1: update)\nreturn [\n  { json: { type: 'create', events: toCreate } },\n  { json: { type: 'update', events: toUpdate } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "id": "95c4adbb-fb1c-42b6-aef5-1210e5374988",
+      "name": "Filter Sheet",
+      "notesInFlow": false,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalItems = $(\"Meeting: 0 (No) : 1 (Yes)\").all();\n\nconst googleItems = items;\n\nreturn googleItems.map((item, index) => {\n  const originalId = originalItems[index]?.json?.id || null;\n  const lastMod = originalItems[index]?.json?.lastModifiedDateTime || null;\n  const address_old = originalItems[index]?.json?.address || null;\n  const is_conference = originalItems[index]?.json?.createMeeting || null;\n  const new_description = `${item.json.description}\\n\\nGoogle Meet Link: ${item.json.conferenceData.entryPoints[0].uri}`;\n  const htmlDescription = new_description.replace(/\\n/g, '<br>');\n  \n  return {\n    json: {\n      ...item.json,\n      micro_id: originalId,\n      lastModifiedDateTime: lastMod,\n      address_old: address_old,\n      is_conference: is_conference,\n      htmlDescription: htmlDescription\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "96a92012-e7aa-47c2-9978-91d0e98e0d8e",
+      "name": "Collect Past Info (Meeting)"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY",
+          "mode": "list",
+          "cachedResultName": "Calendar History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.organizer.displayName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "google_id": "={{ $json.id }}",
+            "title": "={{ $json.summary }}",
+            "description": "={{ $json.description }}",
+            "start_date_time": "={{ $json.start.dateTime }}",
+            "end_date_time": "={{ $json.end.dateTime }}",
+            "rrule": "={{ $json.recurrence[0] }}",
+            "micro_id": "={{ $json.micro_id }}",
+            "is_conference": "={{ $json.is_conference }}",
+            "event_last_modified": "={{ $json.lastModifiedDateTime }}",
+            "location": "={{ $json.address_old }}"
+          },
+          "matchingColumns": [
+            "micro_id"
+          ],
+          "schema": [
+            {
+              "id": "micro_id",
+              "displayName": "micro_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "google_id",
+              "displayName": "google_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_conference",
+              "displayName": "is_conference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "start_date_time",
+              "displayName": "start_date_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "end_date_time",
+              "displayName": "end_date_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rrule",
+              "displayName": "rrule",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_last_modified",
+              "displayName": "event_last_modified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        2304,
+        -288
+      ],
+      "id": "abfe7fec-a669-4da3-8d04-647e1cd23c3a",
+      "name": "Update Calendar History",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vNOPhhmrwd5jJSX1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY",
+          "mode": "list",
+          "cachedResultName": "Calendar History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.organizer.displayName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "google_id": "={{ $json.id }}",
+            "title": "={{ $json.summary }}",
+            "description": "={{ $json.description }}",
+            "start_date_time": "={{ $json.start.dateTime }}",
+            "end_date_time": "={{ $json.end.dateTime }}",
+            "rrule": "={{ $json.recurrence[0] }}",
+            "micro_id": "={{ $json.micro_id }}",
+            "is_conference": "={{ $json.is_conference }}",
+            "event_last_modified": "={{ $json.lastModifiedDateTime }}",
+            "location": "={{ $json.address_old }}"
+          },
+          "matchingColumns": [
+            "micro_id"
+          ],
+          "schema": [
+            {
+              "id": "micro_id",
+              "displayName": "micro_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "google_id",
+              "displayName": "google_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_conference",
+              "displayName": "is_conference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "start_date_time",
+              "displayName": "start_date_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "end_date_time",
+              "displayName": "end_date_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rrule",
+              "displayName": "rrule",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_last_modified",
+              "displayName": "event_last_modified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        2304,
+        96
+      ],
+      "id": "607677c2-7f6a-4bf0-82ce-2133b21be4ea",
+      "name": "Update Calendar History (Meeting)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vNOPhhmrwd5jJSX1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $('Call Start').item.json.googleCalendarId }}",
+          "mode": "id"
+        },
+        "start": "={{ $json.startDateTime }}",
+        "end": "={{ $json.endDateTime }}",
+        "additionalFields": {
+          "allday": "={{ $json.allDay }}",
+          "attendees": [],
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolution": "=hangoutsMeet"
+            }
+          },
+          "description": "={{ $json.description }}",
+          "guestsCanInviteOthers": false,
+          "guestsCanModify": true,
+          "location": "={{ $json.address }}",
+          "rrule": "={{ $json.recurrence.rrule }}",
+          "sendUpdates": "none",
+          "showMeAs": "={{ $json.show_as }}",
+          "summary": "={{ $json.title }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1856,
+        0
+      ],
+      "id": "909c05f9-83d3-474a-b0ae-2706451ec27d",
+      "name": "Create (With Meeting)",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "SHK0qw5mpudeVh37",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "update",
+        "calendarId": {
+          "__rl": true,
+          "value": "={{ $('Call Start').item.json.outlookCalendarId }}",
+          "mode": "id"
+        },
+        "eventId": {
+          "__rl": true,
+          "value": "={{ $json.micro_id }}",
+          "mode": "id"
+        },
+        "additionalFields": {
+          "body": "={{ $json.htmlDescription }}"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        2528,
+        -96
+      ],
+      "id": "39ade363-1088-4e96-b710-b937b27611cb",
+      "name": "Update Add Link To Description",
+      "webhookId": "b04c2b0f-a71a-450b-a475-85c617c0aaa5",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "Ee0mAUUfbm6la1Mo",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY",
+          "mode": "list",
+          "cachedResultName": "Calendar History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Call Start').item.json.calendarName }}",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "micro_id",
+              "lookupValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1632,
+        288
+      ],
+      "id": "b1b840b7-1cd0-4e39-bb34-a6c669e7edfc",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vNOPhhmrwd5jJSX1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "events",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        288
+      ],
+      "id": "abd61fd4-2797-4fdf-8756-c3db17d7f994",
+      "name": "Update Data"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "events",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        -96
+      ],
+      "id": "8722c286-141d-44a1-8bec-115926ea9062",
+      "name": "Create Data"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $('Call Start').item.json.googleCalendarId }}",
+          "mode": "id"
+        },
+        "eventId": "={{ $json.googleId }}",
+        "updateFields": {
+          "allday": "={{ $json.allDay }}",
+          "description": "={{ $json.description }}",
+          "end": "={{ $json.endDateTime }}",
+          "location": "={{ $json.address }}testing",
+          "rrule": "={{ $json.recurrence.rrule }}",
+          "sendUpdates": "none",
+          "showMeAs": "={{ $json.show_as }}",
+          "start": "={{ $json.startDateTime }}",
+          "summary": "={{ $json.title }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2080,
+        288
+      ],
+      "id": "9ac84a54-6627-4f80-bcc6-adac9e079ccc",
+      "name": "Update Events",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "SHK0qw5mpudeVh37",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalItems = $(\"Update Data\").all();\n\nconst sheetItems = items;\n\nreturn originalItems.map((item, index) => {\n  const googleId = sheetItems[index]?.json?.google_id || null;\n  \n  return {\n    json: {\n      ...item.json,\n      googleId: googleId,\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        288
+      ],
+      "id": "2eb39bca-ecff-464b-a4da-6de7ed3cacfb",
+      "name": "Add GoogleId"
+    },
+    {
+      "parameters": {
+        "jsCode": "const originalItems = $(\"Add GoogleId\").all();\n\nconst googleItems = items;\n\nreturn googleItems.map((item, index) => {\n  const originalId = originalItems[index]?.json?.id || null;\n  const lastMod = originalItems[index]?.json?.lastModifiedDateTime || null;\n  const address_old = originalItems[index]?.json?.address || null;\n  const is_conference = originalItems[index]?.json?.createMeeting || null;\n  return {\n    json: {\n      ...item.json,\n      micro_id: originalId,\n      lastModifiedDateTime: lastMod,\n      address_old: address_old,\n      is_conference: is_conference\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        288
+      ],
+      "id": "2ca32d84-03de-4ac7-93b5-ad0c83cdc9a4",
+      "name": "Collect Past Info (Update)"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY",
+          "mode": "list",
+          "cachedResultName": "Calendar History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1W8Xnhs2P6oSo52Y4w-Is8TW9WEhtDnH-422qWvY_7YY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.organizer.displayName }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "google_id": "={{ $json.id }}",
+            "title": "={{ $json.summary }}",
+            "description": "={{ $json.description }}",
+            "start_date_time": "={{ $json.start.dateTime }}",
+            "end_date_time": "={{ $json.end.dateTime }}",
+            "rrule": "={{ $json.recurrence[0] }}",
+            "micro_id": "={{ $json.micro_id }}",
+            "is_conference": "={{ $json.is_conference }}",
+            "event_last_modified": "={{ $json.lastModifiedDateTime }}",
+            "location": "={{ $json.address_old }}"
+          },
+          "matchingColumns": [
+            "micro_id"
+          ],
+          "schema": [
+            {
+              "id": "micro_id",
+              "displayName": "micro_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "google_id",
+              "displayName": "google_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_conference",
+              "displayName": "is_conference",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "start_date_time",
+              "displayName": "start_date_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "end_date_time",
+              "displayName": "end_date_time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rrule",
+              "displayName": "rrule",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_last_modified",
+              "displayName": "event_last_modified",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        2528,
+        288
+      ],
+      "id": "2983d710-7b0d-410c-a24a-f816abaf2afd",
+      "name": "Update Calendar History (Update)",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "vNOPhhmrwd5jJSX1",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "\n{\n\"googleCalendarId\": \n\"bf91c60937f957d08f0ac28847fbdb96efdffe43c1a9d10c7a38a00ebdc5147a@group.calendar.google.com\",\n\"outlookCalendarId\": \n\"AAMkAGIyN2MyMDg1LTk3NzEtNGY3Ny1iMTNhLTljZTI5ZGU5ZjI0MgBGAAAAAAA6YtHADVNhQrZSsFD4u5feBwBzWPZd-YLCTaKj5eZoLNAdAAAAAAEGAABzWPZd-YLCTaKj5eZoLNAdAAAAAAVTAAA=\",\n\"calendarName\": \n\"marco@mdc\",\n\"readOnly\": \nfalse\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -160,
+        0
+      ],
+      "id": "c5b9d33d-85f9-46e0-9e82-a0e484362a37",
+      "name": "Call Start"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get many events": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Parse Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Fields": {
+      "main": [
+        [
+          {
+            "node": "Calendar History Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Create Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meeting: 0 (No) : 1 (Yes)": {
+      "main": [
+        [
+          {
+            "node": "Create",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create (With Meeting)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create": {
+      "main": [
+        [
+          {
+            "node": "Collect Past Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Past Info": {
+      "main": [
+        [
+          {
+            "node": "Update Calendar History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "readOnlyCheck": {
+      "main": [
+        [
+          {
+            "node": "Update Add Link To Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar History Sheet": {
+      "main": [
+        [
+          {
+            "node": "Filter Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Sheet": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Past Info (Meeting)": {
+      "main": [
+        [
+          {
+            "node": "Update Calendar History (Meeting)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "readOnlyCheck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Calendar History": {
+      "main": [
+        []
+      ]
+    },
+    "Create (With Meeting)": {
+      "main": [
+        [
+          {
+            "node": "Collect Past Info (Meeting)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Add Link To Description": {
+      "main": [
+        []
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Add GoogleId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Data": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Data": {
+      "main": [
+        [
+          {
+            "node": "Meeting: 0 (No) : 1 (Yes)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add GoogleId": {
+      "main": [
+        [
+          {
+            "node": "Update Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Events": {
+      "main": [
+        [
+          {
+            "node": "Collect Past Info (Update)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Past Info (Update)": {
+      "main": [
+        [
+          {
+            "node": "Update Calendar History (Update)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Start": {
+      "main": [
+        [
+          {
+            "node": "Get many events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "25479cbc-4560-4799-836f-0681497c8401",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a78cac6566adee16f0fc4376a5627879845957cb127fb871313d1b0ae3dd1d8f"
+  },
+  "id": "C8rZswPq9jNi2fvl",
+  "tags": []
+}

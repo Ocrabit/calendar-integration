@@ -1,0 +1,299 @@
+{
+  "name": "Calendar Sync: Google ↔ Outlook",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "primary",
+        "options": {
+          "timeMin": "={{ $now.minus({days: 1}).toISO() }}",
+          "timeMax": "={{ $now.plus({days: 30}).toISO() }}",
+          "maxResults": 100
+        }
+      },
+      "id": "google-calendar-get",
+      "name": "Get Google Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        460,
+        200
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-oauth",
+          "name": "Google Calendar OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendarId": "primary",
+        "options": {
+          "startTime": "={{ $now.minus({days: 1}).toISO() }}",
+          "endTime": "={{ $now.plus({days: 30}).toISO() }}"
+        }
+      },
+      "id": "outlook-calendar-get",
+      "name": "Get Outlook Events",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 1,
+      "position": [
+        460,
+        400
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "outlook-oauth",
+          "name": "Microsoft Outlook OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll"
+      },
+      "id": "merge-events",
+      "name": "Merge Events",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sync Google events to Outlook\nconst googleEvents = $input.first().json;\nconst outlookEvents = $input.last().json;\n\n// Create a map of existing Outlook events by subject for deduplication\nconst outlookEventMap = new Map();\nif (outlookEvents && outlookEvents.value) {\n  outlookEvents.value.forEach(event => {\n    outlookEventMap.set(event.subject, event);\n  });\n}\n\nconst eventsToCreate = [];\nconst eventsToUpdate = [];\n\n// Process Google events\nif (googleEvents && googleEvents.items) {\n  googleEvents.items.forEach(googleEvent => {\n    // Skip if event has no title or is cancelled\n    if (!googleEvent.summary || googleEvent.status === 'cancelled') {\n      return;\n    }\n    \n    // Check if event already exists in Outlook\n    const existingOutlookEvent = outlookEventMap.get(googleEvent.summary);\n    \n    if (!existingOutlookEvent) {\n      // Create new event in Outlook\n      const newEvent = {\n        subject: googleEvent.summary,\n        body: {\n          contentType: 'text',\n          content: googleEvent.description || ''\n        },\n        start: {\n          dateTime: googleEvent.start.dateTime || googleEvent.start.date,\n          timeZone: googleEvent.start.timeZone || 'UTC'\n        },\n        end: {\n          dateTime: googleEvent.end.dateTime || googleEvent.end.date,\n          timeZone: googleEvent.end.timeZone || 'UTC'\n        },\n        location: {\n          displayName: googleEvent.location || ''\n        },\n        isAllDay: !googleEvent.start.dateTime,\n        source: 'google',\n        googleEventId: googleEvent.id\n      };\n      \n      eventsToCreate.push(newEvent);\n    }\n  });\n}\n\n// Return events to create\nreturn eventsToCreate.map(event => ({ json: event }));"
+      },
+      "id": "process-google-events",
+      "name": "Process Google Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sync Outlook events to Google\nconst googleEvents = $input.first().json;\nconst outlookEvents = $input.last().json;\n\n// Create a map of existing Google events by summary for deduplication\nconst googleEventMap = new Map();\nif (googleEvents && googleEvents.items) {\n  googleEvents.items.forEach(event => {\n    googleEventMap.set(event.summary, event);\n  });\n}\n\nconst eventsToCreate = [];\n\n// Process Outlook events\nif (outlookEvents && outlookEvents.value) {\n  outlookEvents.value.forEach(outlookEvent => {\n    // Skip if event has no subject or is cancelled\n    if (!outlookEvent.subject || outlookEvent.isCancelled) {\n      return;\n    }\n    \n    // Check if event already exists in Google\n    const existingGoogleEvent = googleEventMap.get(outlookEvent.subject);\n    \n    if (!existingGoogleEvent) {\n      // Create new event in Google\n      const newEvent = {\n        summary: outlookEvent.subject,\n        description: outlookEvent.body ? outlookEvent.body.content : '',\n        start: {\n          dateTime: outlookEvent.start.dateTime,\n          timeZone: outlookEvent.start.timeZone\n        },\n        end: {\n          dateTime: outlookEvent.end.dateTime,\n          timeZone: outlookEvent.end.timeZone\n        },\n        location: outlookEvent.location ? outlookEvent.location.displayName : '',\n        source: 'outlook',\n        outlookEventId: outlookEvent.id\n      };\n      \n      eventsToCreate.push(newEvent);\n    }\n  });\n}\n\n// Return events to create\nreturn eventsToCreate.map(event => ({ json: event }));"
+      },
+      "id": "process-outlook-events",
+      "name": "Process Outlook Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendarId": "primary",
+        "summary": "={{ $json.subject }}",
+        "description": "={{ $json.body ? $json.body.content : '' }}",
+        "start": "={{ $json.start.dateTime }}",
+        "end": "={{ $json.end.dateTime }}",
+        "location": "={{ $json.location ? $json.location.displayName : '' }}",
+        "additionalFields": {
+          "extendedProperties": {
+            "private": {
+              "source": "outlook",
+              "outlookEventId": "={{ $json.outlookEventId }}"
+            }
+          }
+        }
+      },
+      "id": "create-google-event",
+      "name": "Create Google Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        400
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-oauth",
+          "name": "Google Calendar OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.body.content }}",
+        "start": "={{ $json.start.dateTime }}",
+        "end": "={{ $json.end.dateTime }}",
+        "location": "={{ $json.location.displayName }}",
+        "additionalFields": {
+          "extendedProperties": {
+            "source": "google",
+            "googleEventId": "={{ $json.googleEventId }}"
+          }
+        }
+      },
+      "id": "create-outlook-event",
+      "name": "Create Outlook Event",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        200
+      ],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "outlook-oauth",
+          "name": "Microsoft Outlook OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log sync results\nconst items = $input.all();\nconst googleCreated = items.filter(item => item.json.source === 'google').length;\nconst outlookCreated = items.filter(item => item.json.source === 'outlook').length;\n\nconsole.log(`Sync completed: ${googleCreated} events created in Outlook, ${outlookCreated} events created in Google`);\n\nreturn [{\n  json: {\n    syncTime: new Date().toISOString(),\n    googleEventsCreated: googleCreated,\n    outlookEventsCreated: outlookCreated,\n    totalEventsProcessed: items.length\n  }\n}];"
+      },
+      "id": "log-results",
+      "name": "Log Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Google Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Outlook Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Google Events": {
+      "main": [
+        [
+          {
+            "node": "Merge Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Outlook Events": {
+      "main": [
+        [
+          {
+            "node": "Merge Events",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Events": {
+      "main": [
+        [
+          {
+            "node": "Process Google Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Process Outlook Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Google Events": {
+      "main": [
+        [
+          {
+            "node": "Create Outlook Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Outlook Events": {
+      "main": [
+        [
+          {
+            "node": "Create Google Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Event": {
+      "main": [
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Outlook Event": {
+      "main": [
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Chicago"
+  },
+  "versionId": "1"
+}
